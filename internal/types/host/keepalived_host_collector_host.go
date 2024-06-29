@@ -163,31 +163,77 @@ func (k *KeepalivedHostCollectorHost) JSONVrrps() ([]collector.VRRP, error) {
 }
 
 func (k *KeepalivedHostCollectorHost) StatsVrrps() (map[string]*collector.VRRPStats, error) {
-	const fileName = "/tmp/keepalived.stats"
+    const fileName = "/tmp/keepalived.stats"
 
-	f, err := os.Open(fileName)
-	if err != nil {
-		logrus.WithError(err).WithField("fileName", fileName).Error("failed to open Stats VRRP file")
+    // Check if the file is open in write mode by another process
+    locked, err := isFileLocked(fileName)
+    if err != nil {
+        logrus.WithError(err).WithField("fileName", fileName).Error("failed to check file lock status")
+        return nil, err
+    }
+    if locked {
+        errMsg := fmt.Sprintf("File %s is locked by another process.", fileName)
+        logrus.Error(errMsg)
+        return nil, fmt.Errorf(errMsg)
+    }
 
-		return nil, err
-	}
-	defer f.Close()
+    f, err := os.Open(fileName)
+    if err != nil {
+        logrus.WithError(err).WithField("fileName", fileName).Error("failed to open Stats VRRP file")
+        return nil, err
+    }
+    defer f.Close()
 
-	return collector.ParseStats(f)
+    // Assuming ParseVRRPStats is a function you have that parses the statistics from the file
+    // and returns a map of VRRP instance names to their statistics
+    return collector.ParseStats(f)
+}
+
+func isFileLocked(fileName string) (bool, error) {
+    file, err := os.Open(fileName)
+    if err != nil {
+        return false, err
+    }
+    defer file.Close()
+
+    fd := file.Fd()
+    err = syscall.Flock(int(fd), syscall.LOCK_EX|syscall.LOCK_NB)
+
+    if err == nil {
+        syscall.Flock(int(fd), syscall.LOCK_UN)
+        return false, nil
+    }
+
+    if err == syscall.EWOULDBLOCK {
+        return true, nil
+    }
+
+    return false, err
 }
 
 func (k *KeepalivedHostCollectorHost) DataVrrps() (map[string]*collector.VRRPData, error) {
-	const fileName = "/tmp/keepalived.data"
+    const fileName = "/tmp/keepalived.data"
 
-	f, err := os.Open(fileName)
-	if err != nil {
-		logrus.WithError(err).WithField("fileName", fileName).Error("failed to open Data VRRP file")
+    // Check if the file is open in write mode by another process
+    locked, err := isFileLocked(fileName)
+    if err != nil {
+        logrus.WithError(err).WithField("fileName", fileName).Error("failed to check file lock status")
+        return nil, err
+    }
+    if locked {
+        errMsg := fmt.Sprintf("File %s is locked by another process.", fileName)
+        logrus.Error(errMsg)
+        return nil, fmt.Errorf(errMsg)
+    }
 
-		return nil, err
-	}
-	defer f.Close()
+    f, err := os.Open(fileName)
+    if err != nil {
+        logrus.WithError(err).WithField("fileName", fileName).Error("failed to open Data VRRP file")
+        return nil, err
+    }
+    defer f.Close()
 
-	return collector.ParseVRRPData(f)
+    return collector.ParseVRRPData(f)
 }
 
 func (k *KeepalivedHostCollectorHost) ScriptVrrps() ([]collector.VRRPScript, error) {
