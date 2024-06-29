@@ -123,18 +123,22 @@ func (k *KeepalivedCollector) Collect(ch chan<- prometheus.Metric) {
 
 	var keepalivedStats *KeepalivedStats
 
-	if err := backoff.Retry(func() error {
-		var err error
-		keepalivedStats, err = k.getKeepalivedStats()
-		if err != nil {
-			logrus.WithError(err).Debug("Failed to get keepalived stats. Retrying...")
-		}
-
-		return err
-	}, b); err != nil {
-		logrus.WithError(err).Error("No data found to be exported")
-
+	if err := k.collector.Refresh(); err != nil {
 		keepalivedUp = 0
+	} else {
+		if err := backoff.Retry(func() error {
+			var err error
+			keepalivedStats, err = k.getKeepalivedStats()
+			if err != nil {
+				logrus.WithError(err).Debug("Failed to get keepalived stats. Retrying...")
+			}
+
+			return err
+		}, b); err != nil {
+			logrus.WithError(err).Error("No data found to be exported")
+
+			keepalivedUp = 0
+		}
 	}
 
 	k.newConstMetric(ch, "keepalived_up", prometheus.GaugeValue, keepalivedUp)
@@ -218,10 +222,6 @@ func (k *KeepalivedCollector) getKeepalivedStats() (*KeepalivedStats, error) {
 	}
 
 	var err error
-
-	if err := k.collector.Refresh(); err != nil {
-		return nil, err
-	}
 
 	if k.useJSON {
 		stats.VRRPs, err = k.collector.JSONVrrps()
